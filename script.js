@@ -1,34 +1,41 @@
 let authkey = localStorage['auth_key']
 let url = localStorage['server_url']
 let players = {}
-var markers = []
+let playerMarkerGroup = L.layerGroup([]);
 
-Object.entries(players).forEach(function (ele) {addPlayerMarker(ele)})
-
-function getData(auth_key, url) {
-    let response = fetch(url, {
+async function getData(auth_key, url) {
+    let response = await fetch(url + '/get_players', {
         headers: {
             'Authorization': auth_key
         }
-    })
+    });
     if (response.ok) {
-        players = response.json()
-        
+        players = await response.json();
     }
 }
-
-function addPlayerMarker(player) {
-    if (markers.some(function (ment) { 
-        if (ment._id == player) {
-            ment.setLatLng([player[1]['lat'], player[1]['lng']])
-            return true;
-        }
-    }));
-    else {
-        var marker = new L.Marker([player[1]['lat'], player[1]['lng']]);
-        marker.bindTooltip(player[0], {permanent: true})
-        marker.addTo(map);
-        marker._id = player[0]
-        markers.push(marker)
-    }
+async function postData(auth_key, url) {
+    let {latitude, longitude} = (await new Promise((res,rej)=>navigator.geolocation.getCurrentPosition(res,rej))).coords;
+    await fetch(url + '/heartbeat', {
+        method: 'POST',
+        headers: {
+            'Authorization': auth_key,
+            'Content-Type': 'application/json'
+        },
+        body: JSON.stringify({status: 'n/a', lat:  latitude, lng: longitude})
+    });
 }
+function deleteAndCreate(marker_array) {
+    marker_array.clearLayers();
+    Object.entries(players).forEach(addPlayerMarker)
+    playerMarkerGroup.addTo(map)
+}
+function addPlayerMarker([name, data]) {
+    var marker = new L.Marker([data['lat'], data['lng']]);
+    marker.bindTooltip(name, { permanent: true })
+    playerMarkerGroup.addLayer(marker)
+}
+setInterval(async () => {
+    await postData(authkey, url);
+    await getData(authkey, url);
+    deleteAndCreate(playerMarkerGroup);
+}, 1000)
